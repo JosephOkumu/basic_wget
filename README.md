@@ -1,58 +1,42 @@
-# Go Wget Clone
+# The Go Programming Language
 
-A wget-like utility implemented in Go that supports downloading files and mirroring websites.
+Go is an open source programming language that makes it easy to build simple,
+reliable, and efficient software.
 
-## Features
+![Gopher image](https://golang.org/doc/gopher/fiveyears.jpg)
+*Gopher image by [Renee French][rf], licensed under [Creative Commons 4.0 Attribution license][cc4-by].*
 
-- Download files from URLs (HTTP/HTTPS)
-- Save files with custom names (-O flag)
-- Save files to specific directories (-P flag)
-- Download in background mode (-B flag)
-- Limit download speed (--rate-limit flag)
-- Download multiple files asynchronously (-i flag)
-- Mirror websites (--mirror flag)
-  - Reject specific file types (-R flag)
-  - Exclude directories (-X flag)
-  - Convert links for offline viewing (--convert-links flag)
+Our canonical Git repository is located at https://go.googlesource.com/go.
+There is a mirror of the repository at https://github.com/golang/go.
 
-## Usage
+Unless otherwise noted, the Go source files are distributed under the
+BSD-style license found in the LICENSE file.
 
-Basic download:
-```bash
-go run . https://example.com/file.zip
-```
+### Download and Install
 
-Download with custom name:
-```bash
-go run . -O=newname.zip https://example.com/file.zip
-```
+#### Binary Distributions
 
-Download to specific directory:
-```bash
-go run . -P=/downloads -O=file.zip https://example.com/file.zip
-```
+Official binary distributions are available at https://go.dev/dl/.
 
-Background download:
-```bash
-go run . -B https://example.com/file.zip
-```
+After downloading a binary release, visit https://go.dev/doc/install
+for installation instructions.
 
-Rate limited download:
-```bash
-go run . --rate-limit=400k https://example.com/file.zip
-```
+#### Install From Source
 
-Multiple file download:
-```bash
-go run . -i=downloads.txt
-```
+If a binary distribution is not available for your combination of
+operating system and architecture, visit
+https://go.dev/doc/install/source
+for source installation instructions.
 
-Mirror website:
-```bash
-go run . --mirror https://example.com
-```
+### Contributing
 
-Mirror with filters:
-```bash
-go run . --mirror -R=jpg,gif -X=/assets,/css https://example.com
-```
+Go is the work of thousands of contributors. We appreciate your help!
+
+To contribute, please read the contribution guidelines at https://go.dev/doc/contribute.
+
+Note that the Go project uses the issue tracker for bug reports and
+proposals only. See https://go.dev/wiki/Questions for a list of
+places to ask questions about the Go language.
+
+[rf]: https://reneefrench.blogspot.com/
+[cc4-by]: https://creativecommons.org/licenses/by/4.0/
