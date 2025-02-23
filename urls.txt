@@ -1,0 +1,2 @@
+https://raw.githubusercontent.com/golang/go/master/README.md
+https://raw.githubusercontent.com/golang/go/master/CONTRIBUTING.md
