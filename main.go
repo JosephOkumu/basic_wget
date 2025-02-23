@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	
+	"wget/mirror"
 )
 
 type Config struct {
@@ -19,6 +22,7 @@ type Config struct {
 	outputDir     string
 	background    bool
 	rateLimit     string
+	rateBytes     int64 // bytes per second after parsing rateLimit
 	inputFile     string
 	mirror        bool
 	reject        string
@@ -40,13 +44,18 @@ func (dp *DownloadProgress) Write(p []byte) (int, error) {
 }
 
 func (dp *DownloadProgress) printProgress() {
-	if dp.total == 0 {
+	elapsed := time.Since(dp.startTime)
+	speed := float64(dp.current) / elapsed.Seconds() / 1024 // KB/s
+	
+	if dp.total <= 0 {
+		// Unknown total size
+		fmt.Printf("\r %.2f KiB transferred at %.2f KiB/s",
+			float64(dp.current)/1024,
+			speed)
 		return
 	}
 	
 	percent := float64(dp.current) * 100 / float64(dp.total)
-	elapsed := time.Since(dp.startTime)
-	speed := float64(dp.current) / elapsed.Seconds() / 1024 // KB/s
 	
 	// Create progress bar
 	width := 50
@@ -71,6 +80,63 @@ func (dp *DownloadProgress) printProgress() {
 	if dp.current == dp.total {
 		fmt.Println()
 	}
+}
+
+func parseRateLimit(rateLimit string) (int64, error) {
+	if rateLimit == "" {
+		return 0, nil
+	}
+	
+	rateLimit = strings.ToLower(rateLimit)
+	multiplier := int64(1)
+	
+	if strings.HasSuffix(rateLimit, "k") {
+		multiplier = 1024
+		rateLimit = rateLimit[:len(rateLimit)-1]
+	} else if strings.HasSuffix(rateLimit, "m") {
+		multiplier = 1024 * 1024
+		rateLimit = rateLimit[:len(rateLimit)-1]
+	}
+	
+	rate, err := strconv.ParseInt(rateLimit, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	
+	return rate * multiplier, nil
+}
+
+type rateLimitedReader struct {
+	r        io.Reader
+	rateBytes int64 // bytes per second
+	lastRead time.Time
+	bytesRead int64
+}
+
+func newRateLimitedReader(r io.Reader, rateBytes int64) io.Reader {
+	return &rateLimitedReader{
+		r:        r,
+		rateBytes: rateBytes,
+		lastRead: time.Now(),
+	}
+}
+
+func (r *rateLimitedReader) Read(p []byte) (n int, err error) {
+	if r.rateBytes <= 0 {
+		return r.r.Read(p)
+	}
+	
+	now := time.Now()
+	expectedDuration := time.Duration(float64(r.bytesRead) / float64(r.rateBytes) * float64(time.Second))
+	actualDuration := now.Sub(r.lastRead)
+	
+	if actualDuration < expectedDuration {
+		time.Sleep(expectedDuration - actualDuration)
+	}
+	
+	n, err = r.r.Read(p)
+	r.bytesRead += int64(n)
+	return
 }
 
 func downloadFile(url string, config Config) error {
@@ -117,7 +183,12 @@ func downloadFile(url string, config Config) error {
 		startTime: time.Now(),
 	}
 
-	_, err = io.Copy(out, io.TeeReader(resp.Body, progress))
+	reader := io.TeeReader(resp.Body, progress)
+	if config.rateBytes > 0 {
+		reader = newRateLimitedReader(reader, config.rateBytes)
+	}
+
+	_, err = io.Copy(out, reader)
 	if err != nil {
 		return err
 	}
@@ -168,6 +239,16 @@ func main() {
 	flag.BoolVar(&config.convertLinks, "convert-links", false, "Convert links for offline viewing")
 	
 	flag.Parse()
+	
+	// Parse rate limit
+	if config.rateLimit != "" {
+		rateBytes, err := parseRateLimit(config.rateLimit)
+		if err != nil {
+			fmt.Printf("Error parsing rate limit: %v\n", err)
+			os.Exit(1)
+		}
+		config.rateBytes = rateBytes
+	}
 
 	if config.background {
 		logFile, err := os.Create("wget-log")
@@ -183,6 +264,41 @@ func main() {
 	if len(args) == 0 && config.inputFile == "" {
 		fmt.Println("Please provide a URL or use -i flag with an input file")
 		os.Exit(1)
+	}
+
+	if config.mirror {
+		// Convert reject and exclude flags to slices
+		rejectTypes := []string{}
+		if config.reject != "" {
+			rejectTypes = strings.Split(config.reject, ",")
+		}
+		
+		excludePaths := []string{}
+		if config.exclude != "" {
+			excludePaths = strings.Split(config.exclude, ",")
+		}
+		
+		// Create mirror config
+		mirrorConfig := &mirror.Config{
+			URL:          args[0],
+			RejectTypes:  rejectTypes,
+			ExcludePaths: excludePaths,
+			ConvertLinks: config.convertLinks,
+			OutputDir:    config.outputDir,
+		}
+		
+		// Create mirror instance
+		m, err := mirror.New(mirrorConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+		
+		// Start mirroring
+		if err := m.Start(); err != nil {
+			log.Fatal(err)
+		}
+		
+		return
 	}
 
 	if config.inputFile != "" {
